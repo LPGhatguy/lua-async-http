@@ -14,6 +14,7 @@ use std::{
             Ordering,
         },
     },
+    time::Duration,
     collections::HashMap,
 };
 
@@ -34,11 +35,11 @@ use lua51_sys::{
     luaL_Reg,
 };
 
-lazy_static! {
-    static ref LAST_ID: AtomicUsize = AtomicUsize::new(0);
-}
-
 pub fn get_id() -> u32 {
+    lazy_static! {
+        static ref LAST_ID: AtomicUsize = AtomicUsize::new(0);
+    }
+
     LAST_ID.fetch_add(1, Ordering::SeqCst) as u32
 }
 
@@ -139,10 +140,20 @@ pub unsafe extern "C" fn check_request(state: *mut lua_State) -> c_int {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn sleep_ms(state: *mut lua_State) -> c_int {
+    let sleep_amount = luaL_checknumber(state, 1) as u64;
+
+    thread::sleep(Duration::from_millis(sleep_amount));
+
+    0
+}
+
+#[no_mangle]
 pub extern "C" fn luaopen_async_http(state: *mut lua_State) -> c_int {
     let library_name = CString::new("async_http").unwrap();
     let request_name = CString::new("request").unwrap();
     let check_request_name = CString::new("check_request").unwrap();
+    let sleep_ms_name = CString::new("sleep_ms").unwrap();
 
     let registration = &[
         luaL_Reg {
@@ -152,6 +163,10 @@ pub extern "C" fn luaopen_async_http(state: *mut lua_State) -> c_int {
         luaL_Reg {
             name: check_request_name.as_ptr(),
             func: Some(check_request),
+        },
+        luaL_Reg {
+            name: sleep_ms_name.as_ptr(),
+            func: Some(sleep_ms),
         },
         luaL_Reg {
             name: ptr::null(),
