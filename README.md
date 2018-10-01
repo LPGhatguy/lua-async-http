@@ -7,45 +7,43 @@ LuaSocket's HTTP interface is synchronous. The API I'm trying to emulate, Roblox
 Other options would be pulling another library from the Lua ecosystem, but they generally have poor Windows support or are otherwise difficult to build. This project builds with just `cargo build` on every platform.
 
 ## Usage
-The library's API is **horrible** right now. It's based on numeric status codes and polling for completion -- this is because I want Lua to be in control of task scheduling, unlike other Lua solutions.
+The library's API is not excellent right now but is functional. It's based on string status codes and polling for completion -- this is because I want Lua to be in control of task scheduling, unlike other Lua solutions.
 
-In general:
+In general, usage is:
 
 ```lua
-local socket = require("socket")
 local async_http = require("async_http")
 
-local handle = async_http.request("https://google.com/")
+local initialSuccess, handle = async_http.request("http://example.com")
+assert(initialSuccess, handle)
 
 while true do
-	local success, status, result = async_http.check_request(handle)
+	local status, result = async_http.check_request(handle)
 
-	if not success then
-		error("Handle was invalid, this shouldn't happen.")
-	end
+	print("checking with status ", status)
 
-	print("Checking request status...")
-
-	if status == 0 then
-		print("Request is still in flight.")
-		socket.sleep(0.2)
-	elseif status == 1 then
-		print("Success! Body: ", result)
+	if status == "in-flight" then
+		async_http.sleep_ms(200)
+	elseif status == "success" then
+		print("body:")
+		print(result)
 		break
-	elseif status == 2 then
-		error("Error! Message: " .. result)
+	elseif status == "error" then
+		error("error: " .. result)
 	else
-		error("Unexpected status code: " .. status)
+		error("unknown status: " .. status)
 	end
 end
+
+async_http.cleanup_request(handle)
 ```
 
 ## TODO
 I stopped working on this library in favor of using Roblox itself for integration tests when possible. I'll revisit this eventually when I figure out whether the project would be integrated into Lemur or Rojo, and what the API should actually be.
 
-* [ ] Move `success` value to `request` instead of `check_request`
+* [x] Move `success` value to `request` instead of `check_request`
 * [ ] Optionally supply event loop?
-* [ ] Use strings or userdata instead of numeric status codes
+* [x] Use strings or userdata instead of numeric status codes
 * [ ] Return table for response with:
 	* `body`
 	* `status_code`

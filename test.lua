@@ -9,15 +9,15 @@ assert(initialSuccess, handle)
 while true do
 	local status, result = async_http.check_request(handle)
 
-	print("checking...")
+	print("checking with status ", status)
 
-	if status == 0 then
-		print("in flight")
+	if status == "in-flight" then
 		async_http.sleep_ms(200)
-	elseif status == 1 then
-		print("body: " .. result)
+	elseif status == "success" then
+		print("body:")
+		print(result)
 		break
-	elseif status == 2 then
+	elseif status == "error" then
 		error("error: " .. result)
 	else
 		error("unknown status: " .. status)

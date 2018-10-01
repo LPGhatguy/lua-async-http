@@ -121,23 +121,22 @@ pub unsafe extern "C" fn check_request(state: *mut lua_State) -> c_int {
             Some(status) => {
                 match status {
                     RequestStatus::InFlight => {
-                        lua_pushnumber(state, 0.0);
+                        push_str(state, "in-flight");
 
                         return 1;
                     },
                     RequestStatus::Success(response) => {
-                        lua_pushnumber(state, 1.0);
+                        push_str(state, "success");
 
-                        let body = CString::new(response.body.as_bytes()).unwrap();
-                        lua_pushlstring(state, body.as_ptr(), response.body.len());
+                        let body = response.body.as_bytes();
+                        lua_pushlstring(state, body.as_ptr() as *const i8, body.len());
 
                         return 2;
                     },
                     RequestStatus::Error(message) => {
-                        lua_pushnumber(state, 2.0);
+                        push_str(state, "error");
 
-                        let body = CString::new(message.as_bytes()).unwrap();
-                        lua_pushlstring(state, body.as_ptr(), message.len());
+                        push_str(state, &message);
 
                         return 2;
                     },
@@ -145,8 +144,7 @@ pub unsafe extern "C" fn check_request(state: *mut lua_State) -> c_int {
 
             },
             None => {
-                lua_pushnumber(state, 2.0);
-
+                push_str(state, "error");
                 push_str(state, "Unknown request ID");
 
                 return 2;
