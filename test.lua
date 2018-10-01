@@ -3,14 +3,11 @@ package.cpath = package.cpath .. ";target/i686-pc-windows-msvc/debug/?.dll"
 
 local async_http = require("async_http")
 
-local handle = async_http.request("http://example.com/")
+local initialSuccess, handle = async_http.request("http://example.com")
+assert(initialSuccess, handle)
 
 while true do
-	local success, status, result = async_http.check_request(handle)
-
-	if not success then
-		error("failed!")
-	end
+	local status, result = async_http.check_request(handle)
 
 	print("checking...")
 
@@ -26,3 +23,5 @@ while true do
 		error("unknown status: " .. status)
 	end
 end
+
+async_http.cleanup_request(handle)

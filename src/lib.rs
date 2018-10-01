@@ -25,7 +25,6 @@ use libc::{
 
 use lua51_sys::{
     lua_State,
-    lua_tolstring,
     lua_pushnumber,
     lua_pushlstring,
     lua_pushboolean,
@@ -35,12 +34,16 @@ use lua51_sys::{
     luaL_Reg,
 };
 
-pub fn get_id() -> u32 {
+fn get_id() -> u32 {
     lazy_static! {
         static ref LAST_ID: AtomicUsize = AtomicUsize::new(0);
     }
 
     LAST_ID.fetch_add(1, Ordering::SeqCst) as u32
+}
+
+unsafe fn push_str(state: *mut lua_State, value: &str) {
+    lua_pushlstring(state, value.as_ptr() as *const c_char, value.len());
 }
 
 #[derive(Debug)]
@@ -65,6 +68,19 @@ pub unsafe extern "C" fn request(state: *mut lua_State) -> c_int {
     let url_source = luaL_checklstring(state, 1, ptr::null_mut());
     let url = CStr::from_ptr(url_source).to_str().unwrap().to_string();
 
+    println!("Requesting {}", url);
+
+    let request = match REQWEST_CLIENT.get(&url).build() {
+        Ok(request) => request,
+        Err(_) => {
+            lua_pushboolean(state, 0);
+
+            push_str(state, "Invalid request parameters");
+
+            return 2;
+        },
+    };
+
     let id = get_id();
 
     {
@@ -73,10 +89,8 @@ pub unsafe extern "C" fn request(state: *mut lua_State) -> c_int {
         outstanding_requests.insert(id, RequestStatus::InFlight);
     }
 
-    println!("Requesting {}", url);
-
     thread::spawn(move || {
-        match REQWEST_CLIENT.get(&url).send() {
+        match REQWEST_CLIENT.execute(request) {
             Ok(mut http_response) => {
                 let body = http_response.text().unwrap();
 
@@ -85,14 +99,15 @@ pub unsafe extern "C" fn request(state: *mut lua_State) -> c_int {
             },
             Err(_) => {
                 let mut outstanding_requests = OUTSTANDING_REQUESTS.lock().unwrap();
-                outstanding_requests.insert(id, RequestStatus::Error("aahh".to_string()));
-            }
+                outstanding_requests.insert(id, RequestStatus::Error("HTTP error".to_string()));
+            },
         }
     });
 
+    lua_pushboolean(state, 1);
     lua_pushnumber(state, id as f64);
 
-    1
+    2
 }
 
 #[no_mangle]
@@ -104,13 +119,11 @@ pub unsafe extern "C" fn check_request(state: *mut lua_State) -> c_int {
 
         match outstanding_requests.get(&request_id) {
             Some(status) => {
-                lua_pushboolean(state, 1);
-
                 match status {
                     RequestStatus::InFlight => {
                         lua_pushnumber(state, 0.0);
 
-                        return 2;
+                        return 1;
                     },
                     RequestStatus::Success(response) => {
                         lua_pushnumber(state, 1.0);
@@ -118,7 +131,7 @@ pub unsafe extern "C" fn check_request(state: *mut lua_State) -> c_int {
                         let body = CString::new(response.body.as_bytes()).unwrap();
                         lua_pushlstring(state, body.as_ptr(), response.body.len());
 
-                        return 3;
+                        return 2;
                     },
                     RequestStatus::Error(message) => {
                         lua_pushnumber(state, 2.0);
@@ -126,17 +139,34 @@ pub unsafe extern "C" fn check_request(state: *mut lua_State) -> c_int {
                         let body = CString::new(message.as_bytes()).unwrap();
                         lua_pushlstring(state, body.as_ptr(), message.len());
 
-                        return 3;
+                        return 2;
                     },
                 }
 
             },
             None => {
-                lua_pushboolean(state, 0);
-                return 1;
+                lua_pushnumber(state, 2.0);
+
+                push_str(state, "Unknown request ID");
+
+                return 2;
             },
         }
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn cleanup_request(state: *mut lua_State) -> c_int {
+    let request_id = luaL_checknumber(state, 1) as u32;
+
+    let mut outstanding_requests = OUTSTANDING_REQUESTS.lock().unwrap();
+
+    match outstanding_requests.remove(&request_id) {
+        Some(_) => lua_pushboolean(state, 1),
+        None => lua_pushboolean(state, 0),
+    }
+
+    1
 }
 
 #[no_mangle]
@@ -153,6 +183,7 @@ pub extern "C" fn luaopen_async_http(state: *mut lua_State) -> c_int {
     let library_name = CString::new("async_http").unwrap();
     let request_name = CString::new("request").unwrap();
     let check_request_name = CString::new("check_request").unwrap();
+    let cleanup_request_name = CString::new("cleanup_request").unwrap();
     let sleep_ms_name = CString::new("sleep_ms").unwrap();
 
     let registration = &[
@@ -163,6 +194,10 @@ pub extern "C" fn luaopen_async_http(state: *mut lua_State) -> c_int {
         luaL_Reg {
             name: check_request_name.as_ptr(),
             func: Some(check_request),
+        },
+        luaL_Reg {
+            name: cleanup_request_name.as_ptr(),
+            func: Some(cleanup_request),
         },
         luaL_Reg {
             name: sleep_ms_name.as_ptr(),
