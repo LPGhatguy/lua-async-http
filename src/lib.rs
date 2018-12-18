@@ -30,7 +30,7 @@ use lua51_sys::{
     lua_pushboolean,
     luaL_checklstring,
     luaL_checknumber,
-    luaL_openlib,
+    luaL_register,
     luaL_Reg,
 };
 
@@ -208,7 +208,7 @@ pub extern "C" fn luaopen_async_http(state: *mut lua_State) -> c_int {
     ];
 
     unsafe {
-        luaL_openlib(state, library_name.as_ptr(), registration.as_ptr(), 0);
+        luaL_register(state, library_name.as_ptr(), registration.as_ptr());
     }
 
     1
