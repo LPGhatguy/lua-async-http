@@ -1,5 +1,5 @@
--- In order to use the library directly from the build directory on 32-bit Windows:
-package.cpath = package.cpath .. ";target/i686-pc-windows-msvc/debug/?.dll"
+-- package.cpath = package.cpath .. ";target/i686-pc-windows-msvc/debug/?.dll"
+package.cpath = package.cpath .. ";target/debug/?.dll"
 
 local async_http = require("async_http")
 

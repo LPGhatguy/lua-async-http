@@ -9,6 +9,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 libc = "0.2"
-lua51-sys = "0.1"
+lua51-sys = { git = "https://github.com/LPGhatguy/rust-lua51-sys.git", features = ["dynamic"] }
 reqwest = "0.8.8"
 lazy_static = "1.0"
